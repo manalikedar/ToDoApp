@@ -1,4 +1,8 @@
 #include "ToDoApps.h"
+#include <qfile.h>
+#include <qstandardpaths.h>
+#include <qmessagebox.h>
+#include <qtextstream.h>
 
 ToDoApps::ToDoApps(QWidget *parent)
     : QWidget(parent)
@@ -14,10 +18,51 @@ ToDoApps::ToDoApps(QWidget *parent)
     ui.NewTaskLineEdit->setText("Today, I want to...");
     ui.NewDateText->setText(QDate::currentDate().toString());
 
+    QFile file(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "\\toDoFile.txt");
+    if (!file.open(QIODevice::ReadWrite))
+    {
+        QMessageBox::information(0, "error", file.errorString());
+    }
+
+    QTextStream inFile(&file);
+    while (!inFile.atEnd())
+    {
+        QString newTask = inFile.readLine();
+        int index = newTask.indexOf(":");
+        createNewTask(newTask.mid(index+1), newTask.left(index));
+    }
+    file.resize(0);
+    file.close();
 }
 
 ToDoApps::~ToDoApps()
-{}
+{
+    QFile file(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "\\toDoFile.txt");
+    if (!file.open(QIODevice::ReadWrite))
+    {
+        QMessageBox::information(0, "error", file.errorString());
+    }
+
+    QTextStream outFile(&file);
+   
+    // Get all tasks from the layout and save their details
+    QVBoxLayout* vMainLayout = qobject_cast<QVBoxLayout*>(ui.AllNewTasksContents->layout());
+    for (int i = 0; i < vMainLayout->count(); ++i) {
+        QWidget* widget = vMainLayout->itemAt(i)->widget();
+        if (widget) {
+            QFrame* hFrame = qobject_cast<QFrame*>(widget);
+            if (hFrame) {
+                QLabel* taskLabel = hFrame->findChild<QLabel*>("tasklabel");
+                QLabel* dateLabel = hFrame->findChild<QLabel*>("datelabel");
+
+                if (taskLabel && dateLabel) {
+                    outFile << dateLabel->text() << ":" << taskLabel->text() << "\n";
+                }
+            }
+        }
+    }
+    file.close();
+}
 
 void ToDoApps::initStylesheet() {
     QFile style("style_Generic.css");
@@ -31,12 +76,16 @@ void ToDoApps::initStylesheet() {
 void ToDoApps::SlotAddNewTask() {
     // Get the line edit text
     QString taskName = ui.NewTaskLineEdit->text();
-    //Get current date
-    QString date = QDate::currentDate().toString();
+    if (!taskName.isEmpty())
+    {
+        //Get current date
+        QString date = QDate::currentDate().toString();
 
-    createNewTask(taskName, date);
+        createNewTask(taskName, date);
+    }
 
     ui.NewTaskLineEdit->clear();
+    ui.NewTaskLineEdit->setFocus();
     // This is how to trigger signal
     //emit SignalAddNewTask(taskName, date);
 
@@ -61,7 +110,7 @@ void ToDoApps::createNewTask(QString taskName, QString date){
     }
     // Get the parent widget which the widget created to be child in
     QVBoxLayout* vMainLayout = qobject_cast<QVBoxLayout*>(ui.AllNewTasksContents->layout());
-    vMainLayout = qobject_cast<QVBoxLayout*>(ui.AllNewTasksContents->parentWidget()->layout());
+   
     // Create Frame for the main widget container
     QFrame* HFrame = new QFrame();  
     HFrame->setFrameStyle(QFrame::StyledPanel);
@@ -76,12 +125,16 @@ void ToDoApps::createNewTask(QString taskName, QString date){
     Vframe->setLayout(taskDetails);
 
     QLabel* titlelabel = new QLabel(tr("Task #%1").arg(vMainLayout->count())); // task title
+  
+    titlelabel->setObjectName("titlelabel");
     taskDetails->addWidget(titlelabel);
     QLabel* taskLabel = new QLabel(taskName);
     taskDetails->addWidget(taskLabel);
     QLabel* datelabel = new QLabel(date); // task date created
     taskDetails->addWidget(datelabel);
-
+    titlelabel->setObjectName("titlelabel");
+    taskLabel->setObjectName("tasklabel");
+    datelabel->setObjectName("datelabel");
     // Insert the task details frame inside main task box layout
     newTask->insertWidget(0, Vframe);
 
@@ -99,12 +152,13 @@ void ToDoApps::createNewTask(QString taskName, QString date){
 
     // Insert into parent ui frame
     vMainLayout->insertWidget(vMainLayout->count() - 1, HFrame);
-
+    
     // Connect the delete button
     connect(deleteBtn, SIGNAL(clicked()), this, SLOT(SlotDeleteTask()));
 }
 
 void ToDoApps::SlotDeleteTask() {
+    
     // Get the sender widget
     QPushButton* fromButton = (QPushButton*)sender();
 
